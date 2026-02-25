@@ -1,5 +1,6 @@
 # ❄️ Adaptive Clima: Whole-House Adaptive Thermostat with Zones ♨️
 
+[Adaptive Clima](https://github.com/savaspar/ha_adaptive_clima) is a custom component for [Home Assistant](https://www.home-assistant.io/) that helps managing, configuring, fine-tune and controlling the various heating and cooling sources of a multi-area environment with one single thermostat, using smart algorithms and feel-sensing logic. 
 <br>
 
 **GLOBAL SETTINGS:**
