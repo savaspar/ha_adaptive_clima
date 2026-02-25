@@ -1,5 +1,4 @@
-# ha_adaptive_clima
-Custom integration:  Whole-House Adaptive Thermostat with Zones
+# ❄️ Adaptive Clima: Whole-House Adaptive Thermostat with Zones ♨️
 
 <br>
 
