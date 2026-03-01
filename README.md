@@ -4,7 +4,7 @@
 [Adaptive Clima](https://github.com/savaspar/ha_adaptive_clima) is a custom component for [Home Assistant](https://www.home-assistant.io/) that helps managing, configuring, fine-tune and controlling the various heating and cooling sources of a multi-area environment with one single thermostat, using smart algorithms and strong sensing logic.
 <br><br>
 <strong>Coordinate multiple area devices using your preferred area sensors as “truth”, and **boost** selected areas and Custom Zones.</strong><br/>
-<img src="https://raw.githubusercontent.com/savaspar/ha_adaptive_clima/refs/heads/main/brand/adaptive_clima.png" alt="logo" width="200px" height="200px" />
+<img src="https://raw.githubusercontent.com/savaspar/ha_adaptive_clima/refs/heads/main/brand/logo.png" alt="logo" width="200px" height="200px" />
 <p>
   <img alt="Integration" src="https://img.shields.io/badge/type-integration-blue" />
   <img alt="UI Config" src="https://img.shields.io/badge/config-UI%20only-brightgreen" />
