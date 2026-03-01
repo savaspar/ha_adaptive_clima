@@ -13,8 +13,14 @@
   <img alt="HACS" src="https://img.shields.io/badge/HACS-ready-orange" />
 </p>
 
-> **Important:** Adaptive Clima enforces a **single global mode** at a time (OFF / HEAT / COOL).  
+> **Important:** Adaptive Clima enforces a **single global mode** at a time (OFF / HEAT / COOL) and avoids **AUTO** mode.  
 > It does **not** support one area heating while another is cooling.
+
+> **OFF vs Suspend**
+> - **OFF** (HVAC mode): Adaptive Clima will turn **all included devices off**.
+> - **Suspend** (preset): Adaptive Clima will **not control devices**, but still calculates temperatures.
+>   If Adaptive Clima is OFF and you manually turn on an included device, it will automatically enter **Suspend**.
+
 
 ---
 
@@ -30,7 +36,7 @@ using your chosen area sensors as the “truth”, while still letting you boost
 ### Master thermostat
 - `climate.adaptive_clima` controls all configured Areas
 - Modes: **Off / Heat / Cool**
-- Presets: `none` + Boost Zones
+- Presets: `none` + `Suspend` + Boost Zones
 
 ### Boost Zones
 - Each Area automatically becomes a Boost Zone preset
@@ -38,8 +44,22 @@ using your chosen area sensors as the “truth”, while still letting you boost
 - Zones are unique (no duplicate combinations)
 
 ### Zone Offset
-- `number.zone_offset` controls how much warmer or cooler the active zone runs
-- Applies immediately when changed
+- `number.zone_offset`
+- Slider control (step **0.5°**) from **0.0° to 8.0°**
+- Applies to the currently selected Boost Zone (Area or Custom Zone)
+- **Changing the offset does not immediately rewrite devices**; it is applied on the **next control loop run** (to avoid sudden setpoint jumps)
+
+### Suspend (new)
+- Preset: `Suspend`
+- Purpose: pause Adaptive Clima control **without** forcing devices off
+- Behavior:
+  - UI shows the master thermostat as **OFF** while suspended
+  - The integration still calculates and updates the **average temperature**
+  - Devices remain exactly as they are (no mode/setpoint enforcement)
+  - While suspended, selecting `none` / a zone preset is ignored; it will stay on `Suspend`
+  - To exit Suspend, press **HEAT** or **COOL** on the thermostat card (it will restore the last zone, or `none`)
+
+
 
 ### Actuators
 Adaptive Clima supports one actuator per Area:
@@ -51,6 +71,10 @@ Adaptive Clima supports one actuator per Area:
 Adaptive Clima follows Home Assistant’s global unit system: **°C / °F**.
 
 ---
+
+## Branding 🎨
+This repository includes `brand/` assets (`icon.png` and `logo.png`) for Home Assistant **2026.3+** installs.
+On Home Assistant **2026.2.x**, integration icons are provided via the Home Assistant Brands repository.
 
 ## Installation (HACS) 📦
 
@@ -82,7 +106,7 @@ Settings → Devices & services → Adaptive Clima → **Options**
    - Center = (House target) + (Area bias).
    - Example: Target=25 and Bias=-4 => Center=21. With limit=3, device setpoint stays within [18..24].
      
-2) **Unwind threshold** — when to unwind back toward the center
+2) **Unwind threshold** — when to unwind back toward the center (options from **0.5** to **3.0**; default **2.0**).
    - When the room is within this distance from the target temperature, the integration starts returning the device setpoint back from the limit toward the center (Target + Bias), to reduce oscillations.
      
 3) **Deadband** — tolerance around the target
@@ -142,6 +166,13 @@ Adaptive Clima uses standard Home Assistant services:
   - `switch.turn_off`
 
 ---
+
+## State restore 🔄
+Adaptive Clima restores the last known state after Home Assistant restarts:
+- HVAC mode (OFF / HEAT / COOL)
+- Target temperature
+- Selected preset (including `Suspend` and the last Boost Zone)
+
 
 ## Troubleshooting 🧯
 
