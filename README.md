@@ -49,7 +49,7 @@ using your chosen area sensors as the “truth”, while still letting you boost
 - Applies to the currently selected Boost Zone (Area or Custom Zone)
 - **Changing the offset does not immediately rewrite devices**; it is applied on the **next control loop run** (to avoid sudden setpoint jumps)
 
-### Suspend (new)
+### Suspend
 - Preset: `Suspend`
 - Purpose: pause Adaptive Clima control **without** forcing devices off
 - Behavior:
