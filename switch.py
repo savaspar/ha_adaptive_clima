@@ -1,3 +1,9 @@
+"""Adaptive Clima - Integration in Home-Assistant - Whole-House Adaptive Thermostat with Zones"""
+
+# Copyright (c) 2026 Primeraid Europe (Private Capital Company – IKE)
+# Licensed under the Adaptive Clima License (Source-Available, No Redistribution).
+# See LICENSE in the project root for full license text.
+
 from __future__ import annotations
 
 from homeassistant.components.switch import SwitchEntity

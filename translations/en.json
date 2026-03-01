@@ -1,7 +1,7 @@
 {
   "config": {
     "error": {
-      "must_ack": "Please acknowledge the notice to continue."
+      "must_ack": "Please acknowledge the notice to continue"
     },
     "step": {
       "user": {
@@ -19,120 +19,177 @@
   },
   "options": {
     "menu": {
-      "globals": "Global settings",
-      "areas": "Areas",
-      "add_area": "Add area",
-      "edit_area": "Edit area",
-      "remove_area": "Remove area"
+      "globals": "Global Settings",
+      "areas": "Show Areas",
+      "add_area": "Add Area",
+      "edit_area": "Edit Area",
+      "remove_area": "Remove Area",
+      "zones": "Show Custom Zones",
+      "add_zone": "Add Custom Zone",
+      "edit_zone": "Edit Custom Zone",
+      "remove_zone": "Remove Custom Zone",
+      "zone_defaults": "Zone Defaults"
     },
     "actuator": {
       "climate": "Climate (HVAC)",
-      "number": "Number (setpoint)",
-      "switch": "Switch (on/off)"
+      "number": "Number (Setpoint)",
+      "switch": "Switch (On/Off)"
     },
     "report": {
       "unnamed": "Unnamed",
       "none_configured": "(no areas configured)",
-      "included": "Included (default)",
-      "temp_sensor": "Room temperature sensor",
-      "actuator_entity": "Actuator entity",
-      "supports_heat": "Supports heating",
-      "supports_cool": "Supports cooling",
-      "min_setpoint": "Min setpoint",
-      "max_setpoint": "Max setpoint",
+      "included": "Included (Default)",
+      "temp_sensor": "Room Temperature Sensor",
+      "actuator_entity": "Actuator Entity",
+      "supports_heat": "Supports Heating",
+      "supports_cool": "Supports Cooling",
+      "min_setpoint": "Min Setpoint",
+      "max_setpoint": "Max Setpoint",
       "step": "Step",
       "bias": "Bias",
       "gain": "Gain"
     },
+    "zones": {
+      "none_configured": "(no zones configured)"
+    },
     "error": {
-      "unknown": "Unknown error occurred.",
-      "no_areas": "No Home Assistant Areas exist. Create Areas first.",
-      "area_not_found": "Selected Home Assistant Area was not found.",
-      "already_configured": "That Home Assistant Area is already configured.",
-      "no_entities_in_area": "No matching entities were found in that Home Assistant Area.",
-      "must_support_one": "You must enable at least one mode (supports heat or supports cool).",
-      "min_gt_max": "Min setpoint must be less than or equal to max setpoint.",
-      "no_areas_configured": "No areas are configured yet."
+      "unknown": "Unknown error occurred",
+      "no_areas": "No Home Assistant Areas exist. Create Areas first",
+      "area_not_found": "Selected Home Assistant Area was not found",
+      "already_configured": "That Home Assistant Area is already configured",
+      "no_entities_in_area": "No matching entities were found in that Home Assistant Area",
+      "must_support_one": "You must enable at least one mode (heating or cooling)",
+      "min_gt_max": "Min setpoint must be less than or equal to max setpoint",
+      "no_areas_configured": "No areas are configured yet",
+      "need_more_areas_for_custom_zone": "You need at least 3 areas to create a custom zone (2..x-1)",
+      "zone_need_two": "A custom zone must include at least 2 areas",
+      "zone_all_areas_forbidden": "A custom zone cannot include all areas",
+      "zone_duplicate": "A zone with the same set of areas already exists",
+      "no_custom_zones": "No custom zones exist yet",
+      "area_in_custom_zone": "This area belongs to one or more custom zones. Remove it from those zones first"
     },
     "step": {
       "init": {
         "title": "Adaptive Clima Options",
-        "description": "Choose what you want to configure.",
+        "description": "Choose an option:",
         "data": {
           "action": "Action"
         }
       },
       "globals": {
-        "title": "Global settings",
-        "description": "Tip: Bias is configured per area. Bias is the difference (°C) the device setpoint needs so the room sensor reaches the desired temperature.\nExample: Target 21°C but device must be set to 17°C ⇒ Bias = -4.",
+        "title": "Global Settings",
+        "description": "Tip: Bias is configured per area. Bias is the difference (°) the device setpoint needs so the room sensor reaches the desired temperature.\nExample: Target 21° but device must be set to 17° ⇒ Bias = -4.",
         "data": {
-          "setpoint_limit": "Setpoint limit (°C)",
-          "unwind_threshold": "Unwind threshold (°C)",
-          "deadband": "Deadband (°C)",
-          "scan_interval_seconds": "Loop interval (seconds)",
-          "min_change_seconds": "Minimum change interval (seconds)"
+          "setpoint_limit": "Setpoint Limit (°)",
+          "unwind_threshold": "Unwind Threshold (°)",
+          "deadband": "Deadband (°)",
+          "scan_interval_seconds": "Loop Interval (Seconds)",
+          "min_change_seconds": "Minimum Change Interval (Seconds)"
         }
       },
       "areas": {
-        "title": "Areas",
+        "title": "Show Areas",
         "description": "{report}"
       },
+      "zones": {
+        "title": "Show Custom Zones",
+        "description": "{report}"
+      },
+      "zone_defaults": {
+        "title": "Zone Defaults",
+        "description": "Default temperature offset for zones (°).",
+        "data": {
+          "default_zone_offset": "Default temp offset (°)"
+        }
+      },
       "add_area": {
-        "title": "Add area",
-        "description": "Select a Home Assistant Area and the entities used for temperature sensing and control.",
+        "title": "Add Area",
+        "description": "Select a Home Assistant Area and the entities used for temperature sensing and control:",
         "data": {
           "ha_area_name": "Home Assistant Area",
-          "temp_sensor": "Room temperature sensor",
+          "temp_sensor": "Room Temperature Sensor",
           "actuator_type": "Actuator type"
         }
       },
       "add_area_actuator": {
-        "title": "Select actuator",
-        "description": "Select the actuator entity for the chosen area.",
+        "title": "Select Actuator",
+        "description": "Select the actuator entity for the chosen area:",
         "data": {
-          "actuator_entity": "Actuator entity"
+          "actuator_entity": "Actuator Entity"
         }
       },
       "add_area_config": {
-        "title": "Area settings",
-        "description": "Bias is the difference (°C) the device setpoint needs so the room sensor reaches the desired temperature.\nExample: Target 21°C but device must be set to 17°C ⇒ Bias = -4.",
+        "title": "Area Settings",
+        "description": "Bias is the difference (°) the device setpoint needs so the room sensor reaches the desired temperature.\nExample: Target 21° but device must be set to 17° ⇒ Bias = -4.",
         "data": {
-          "supports_heat": "Supports heating",
-          "supports_cool": "Supports cooling",
-          "min_setpoint": "Min setpoint (°C)",
-          "max_setpoint": "Max setpoint (°C)",
-          "step": "Step (°C)",
-          "bias": "Bias (°C)",
+          "supports_heat": "Supports Heating",
+          "supports_cool": "Supports Cooling",
+          "min_setpoint": "Min Setpoint (°)",
+          "max_setpoint": "Max Setpoint (°)",
+          "step": "Step (°)",
+          "bias": "Bias (°)",
           "gain": "Gain",
           "included": "Included by default"
         }
       },
       "pick_area_to_edit": {
-        "title": "Pick area to edit",
-        "description": "Select an area to edit.",
+        "title": "Edit Area",
+        "description": "Select an area to edit:",
         "data": {
           "area_label": "Area"
         }
       },
       "edit_area": {
-        "title": "Edit area",
-        "description": "Update the saved settings for this area.",
+        "title": "Edit Area",
+        "description": "Update the saved settings for this area",
         "data": {
-          "supports_heat": "Supports heating",
-          "supports_cool": "Supports cooling",
-          "min_setpoint": "Min setpoint (°C)",
-          "max_setpoint": "Max setpoint (°C)",
-          "step": "Step (°C)",
-          "bias": "Bias (°C)",
+          "supports_heat": "Supports Heating",
+          "supports_cool": "Supports Cooling",
+          "min_setpoint": "Min Setpoint (°)",
+          "max_setpoint": "Max Setpoint (°)",
+          "step": "Step (°)",
+          "bias": "Bias (°)",
           "gain": "Gain",
           "included": "Included by default"
         }
       },
       "remove_area": {
-        "title": "Remove area",
-        "description": "Select an area to remove.",
+        "title": "Remove Area",
+        "description": "Select an area to remove:",
         "data": {
           "area_label": "Area"
+        }
+      },
+      "add_zone_pick_areas": {
+        "title": "Add Custom Zone",
+        "description": "Select at least 2 areas to create a custom zone:",
+        "data": {
+          "zone_area_ids": "Areas In Zone"
+        }
+      },
+      "add_zone_confirm": {
+        "title": "The following zone will be created:",
+        "description": "{zone_label}"
+      },
+      "pick_zone_to_edit": {
+        "title": "Pick Custom Zone To Edit",
+        "description": "Select a custom zone to edit:",
+        "data": {
+          "zone_label": "Zone"
+        }
+      },
+      "edit_zone": {
+        "title": "Edit Custom Zone",
+        "description": "Update which areas participate in this custom zone",
+        "data": {
+          "zone_area_ids": "Areas in zone"
+        }
+      },
+      "remove_zone": {
+        "title": "Remove Custom Zone",
+        "description": "Select a custom zone to remove:",
+        "data": {
+          "zone_label": "Zone"
         }
       }
     }

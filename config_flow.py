@@ -1,4 +1,9 @@
-# /config/custom_components/adaptive_clima/config_flow.py
+"""Adaptive Clima - Integration in Home-Assistant - Whole-House Adaptive Thermostat with Zones"""
+
+# Copyright (c) 2026 Primeraid Europe (Private Capital Company – IKE)
+# Licensed under the Adaptive Clima License (Source-Available, No Redistribution).
+# See LICENSE in the project root for full license text.
+
 from __future__ import annotations
 
 import logging
@@ -18,17 +23,22 @@ from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
+    # options
     OPT_AREAS,
+    OPT_ZONES,
     OPT_SETPOINT_LIMIT,
     OPT_UNWIND_THRESHOLD,
     OPT_SCAN_INTERVAL,
     OPT_MIN_CHANGE_SECONDS,
     OPT_DEADBAND,
+    OPT_DEFAULT_ZONE_OFFSET,
     DEFAULT_SETPOINT_LIMIT,
     DEFAULT_UNWIND_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_MIN_CHANGE_SECONDS,
     DEFAULT_DEADBAND,
+    DEFAULT_DEFAULT_ZONE_OFFSET,
+    # area keys
     A_ID,
     A_HA_AREA_ID,
     A_NAME,
@@ -43,9 +53,15 @@ from .const import (
     A_BIAS,
     A_GAIN,
     A_INCLUDED,
+    # actuator types
     ACTUATOR_CLIMATE,
     ACTUATOR_NUMBER,
     ACTUATOR_SWITCH,
+    # zone keys
+    Z_ID,
+    Z_AREA_IDS,
+    Z_BUILTIN,
+    Z_TIED_AREA_ID,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -94,8 +110,13 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
         self.entry = entry
         self._options = _to_plain(entry.options or {})
         self._options.setdefault(OPT_AREAS, [])
+        self._options.setdefault(OPT_ZONES, [])
+
         self._pending_area: dict[str, Any] | None = None
         self._edit_area_id: str | None = None
+
+        self._pending_zone_area_ids: list[str] | None = None
+        self._edit_zone_id: str | None = None
 
     # ---------- translation helper ----------
     def _tr(self, path: str, fallback: str) -> str:
@@ -153,34 +174,85 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
         return supports_heat, supports_cool
 
     # ---------- options helpers ----------
-    def _area_label_map(self) -> dict[str, str]:
+    def _area_id_to_name(self) -> dict[str, str]:
+        """Return AdaptiveClima area_id -> current HA Area name (fallback to stored)."""
+        # map ha_area_id -> name
+        reg = ar.async_get(self.hass)
+        ha_names: dict[str, str] = {a.id: a.name for a in reg.async_list_areas() if a.id and a.name}
+
         out: dict[str, str] = {}
         for a in self._options.get(OPT_AREAS, []):
             aid = a.get(A_ID)
-            name = a.get(A_NAME, aid)
-            typ = a.get(A_ACTUATOR_TYPE, "?")
+            haid = a.get(A_HA_AREA_ID)
+            stored = a.get(A_NAME)
             if aid:
-                out[f"{name} ({typ})"] = aid
+                out[aid] = ha_names.get(haid) or stored or aid
         return out
 
-    def _get_area_by_id(self, area_id: str) -> dict[str, Any] | None:
-        for a in self._options.get(OPT_AREAS, []):
-            if a.get(A_ID) == area_id:
-                return a
-        return None
+    def _zone_key(self, area_ids: list[str]) -> tuple[str, ...]:
+        return tuple(sorted(set(area_ids)))
 
-    def _actuator_type_options(self) -> list[dict[str, str]]:
-        return [
-            {"value": ACTUATOR_CLIMATE, "label": self._tr("options.actuator.climate", "Climate (HVAC)")},
-            {"value": ACTUATOR_NUMBER, "label": self._tr("options.actuator.number", "Number (setpoint)")},
-            {"value": ACTUATOR_SWITCH, "label": self._tr("options.actuator.switch", "Switch (on/off)")},
-        ]
+    def _ensure_builtin_zones(self) -> None:
+        """Ensure each area has a builtin zone; remove builtin zones for missing areas."""
+        areas = self._options.get(OPT_AREAS, [])
+        zones = list(self._options.get(OPT_ZONES, []))
+
+        area_ids = {a.get(A_ID) for a in areas if a.get(A_ID)}
+        existing_builtin = {z.get(Z_TIED_AREA_ID) for z in zones if z.get(Z_BUILTIN) and z.get(Z_TIED_AREA_ID)}
+
+        # remove builtin zones whose tied area no longer exists
+        zones = [z for z in zones if not (z.get(Z_BUILTIN) and z.get(Z_TIED_AREA_ID) and z.get(Z_TIED_AREA_ID) not in area_ids)]
+
+        # add missing builtin zones
+        for aid in sorted(area_ids):
+            if aid not in existing_builtin:
+                zones.append(
+                    {
+                        Z_ID: uuid.uuid4().hex[:8],
+                        Z_AREA_IDS: [aid],
+                        Z_BUILTIN: True,
+                        Z_TIED_AREA_ID: aid,
+                    }
+                )
+
+        self._options[OPT_ZONES] = zones
+
+    def _zone_membership_custom(self, area_id: str) -> list[dict[str, Any]]:
+        """Return custom zones that include this area_id."""
+        out = []
+        for z in self._options.get(OPT_ZONES, []):
+            if z.get(Z_BUILTIN):
+                continue
+            if area_id in (z.get(Z_AREA_IDS) or []):
+                out.append(z)
+        return out
+
+    def _zone_labels(self, include_builtin: bool) -> list[tuple[str, str]]:
+        """
+        Return list of (label, zone_id) for selection.
+        Label is generated from current HA area names.
+        """
+        names = self._area_id_to_name()
+
+        def label_for(z: dict[str, Any]) -> str:
+            parts = [names.get(aid, aid) for aid in (z.get(Z_AREA_IDS) or [])]
+            parts = sorted(parts, key=lambda s: s.lower())
+            return "Warm Zone: " + "+".join(parts)
+
+        items: list[tuple[str, str]] = []
+        for z in self._options.get(OPT_ZONES, []):
+            if not include_builtin and z.get(Z_BUILTIN):
+                continue
+            zid = z.get(Z_ID)
+            if zid:
+                items.append((label_for(z), zid))
+        items.sort(key=lambda x: x[0].lower())
+        return items
 
     def _format_areas_report(self) -> str:
+        # translated labels for the report (already in en.json)
         t_unnamed = self._tr("options.report.unnamed", "Unnamed")
         t_none = self._tr("options.report.none_configured", "(no areas configured)")
-
-        # Field labels
         L_inc = self._tr("options.report.included", "Included (default)")
         L_temp = self._tr("options.report.temp_sensor", "Room temperature sensor")
         L_act = self._tr("options.report.actuator_entity", "Actuator entity")
@@ -219,15 +291,54 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
 
         return "\n\n".join(blocks) if blocks else t_none
 
+    def _format_zones_report(self) -> str:
+        names = self._area_id_to_name()
+        zones = [z for z in self._options.get(OPT_ZONES, []) if not z.get(Z_BUILTIN)]
+        if not zones:
+            return self._tr("options.zones.none_configured", "(no zones configured)")
+
+        blocks = []
+        idx = 0
+        for z in zones:
+            idx += 1
+            zid = z.get(Z_ID, "?")
+            builtin = bool(z.get(Z_BUILTIN))
+            area_ids = list(z.get(Z_AREA_IDS) or [])
+            parts = [names.get(aid, aid) for aid in area_ids]
+            parts = sorted(parts, key=lambda s: s.lower())
+            label = "Warm Zone: " + "+".join(parts) if parts else "Warm Zone: ?"
+            header = f"[{idx}] {label}"
+            lines = [header, "-" * len(header)]
+            lines.append(f"  id: {zid}")
+            lines.append(f"  areas: {', '.join(parts) if parts else '?'}")
+            blocks.append("\n".join(lines))
+
+        return "\n\n".join(blocks)
+
+    def _actuator_type_options(self) -> list[dict[str, str]]:
+        return [
+            {"value": ACTUATOR_CLIMATE, "label": self._tr("options.actuator.climate", "Climate (HVAC)")},
+            {"value": ACTUATOR_NUMBER, "label": self._tr("options.actuator.number", "Number (setpoint)")},
+            {"value": ACTUATOR_SWITCH, "label": self._tr("options.actuator.switch", "Switch (on/off)")},
+        ]
+
     # ---------- steps ----------
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         try:
+            # Ensure builtin zones exist (safe, idempotent)
+            self._ensure_builtin_zones()
+
             menu = [
-                {"value": "globals", "label": self._tr("options.menu.globals", "Global settings")},
+                {"value": "globals", "label": self._tr("options.menu.globals", "Global Settings")},
                 {"value": "areas", "label": self._tr("options.menu.areas", "Areas")},
-                {"value": "add_area", "label": self._tr("options.menu.add_area", "Add area")},
-                {"value": "edit_area", "label": self._tr("options.menu.edit_area", "Edit area")},
-                {"value": "remove_area", "label": self._tr("options.menu.remove_area", "Remove area")},
+                {"value": "add_area", "label": self._tr("options.menu.add_area", "Add Area")},
+                {"value": "edit_area", "label": self._tr("options.menu.edit_area", "Edit Area")},
+                {"value": "remove_area", "label": self._tr("options.menu.remove_area", "Remove Area")},
+                {"value": "zones", "label": self._tr("options.menu.zones", "Zones")},
+                {"value": "add_zone", "label": self._tr("options.menu.add_zone", "Add Custom Zone")},
+                {"value": "edit_zone", "label": self._tr("options.menu.edit_zone", "Edit Custom Zone")},
+                {"value": "remove_zone", "label": self._tr("options.menu.remove_zone", "Remove Custom Zone")},
+                {"value": "zone_defaults", "label": self._tr("options.menu.zone_defaults", "Zone Defaults")},
             ]
 
             schema = vol.Schema(
@@ -251,6 +362,17 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
                 if act == "remove_area":
                     return await self.async_step_remove_area()
 
+                if act == "zones":
+                    return await self.async_step_zones()
+                if act == "add_zone":
+                    return await self.async_step_add_zone_pick_areas()
+                if act == "edit_zone":
+                    return await self.async_step_pick_zone_to_edit()
+                if act == "remove_zone":
+                    return await self.async_step_remove_zone()
+                if act == "zone_defaults":
+                    return await self.async_step_zone_defaults()
+
             return self.async_show_form(step_id="init", data_schema=schema)
 
         except Exception:
@@ -269,7 +391,7 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
                         OPT_UNWIND_THRESHOLD,
                         default=str(self._options.get(OPT_UNWIND_THRESHOLD, DEFAULT_UNWIND_THRESHOLD)),
                     ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(options=["0.5", "1.0", "1.5", "2.0"], mode=selector.SelectSelectorMode.DROPDOWN)
+                        selector.SelectSelectorConfig(options=["0.5", "1.0", "1.5", "2.0", "2.5", "3.0"], mode=selector.SelectSelectorMode.DROPDOWN)
                     ),
                     vol.Required(
                         OPT_DEADBAND,
@@ -317,6 +439,47 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
         except Exception:
             _LOGGER.exception("ADAPTIVE_CLIMA: areas crashed")
             return self.async_show_form(step_id="areas", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    async def async_step_zones(self, user_input: dict[str, Any] | None = None):
+        try:
+            report = self._format_zones_report()
+            schema = vol.Schema({})
+
+            if user_input:
+                return await self.async_step_init()
+
+            return self.async_show_form(
+                step_id="zones",
+                data_schema=schema,
+                description_placeholders={"report": report},
+            )
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: zones crashed")
+            return self.async_show_form(step_id="zones", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    async def async_step_zone_defaults(self, user_input: dict[str, Any] | None = None):
+        try:
+            schema = vol.Schema(
+                {
+                    vol.Required(
+                        OPT_DEFAULT_ZONE_OFFSET,
+                        default=float(self._options.get(OPT_DEFAULT_ZONE_OFFSET, DEFAULT_DEFAULT_ZONE_OFFSET)),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.0, max=5.0, step=0.5, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="°C"
+                        )
+                    )
+                }
+            )
+            if user_input:
+                self._options[OPT_DEFAULT_ZONE_OFFSET] = float(user_input[OPT_DEFAULT_ZONE_OFFSET])
+                return self.async_create_entry(title="", data=self._options)
+            return self.async_show_form(step_id="zone_defaults", data_schema=schema)
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: zone_defaults crashed")
+            return self.async_show_form(step_id="zone_defaults", data_schema=vol.Schema({}), errors={"base": "unknown"})
 
     # ----- Add Area (3 steps) -----
     async def async_step_add_area(self, user_input: dict[str, Any] | None = None):
@@ -460,8 +623,11 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
                 new_list = list(self._options.get(OPT_AREAS, []))
                 new_list.append(dict(self._pending_area))
                 self._options[OPT_AREAS] = new_list
-
                 self._pending_area = None
+
+                # Ensure builtin zone exists for the new area
+                self._ensure_builtin_zones()
+
                 return self.async_create_entry(title="", data=self._options)
 
             return self.async_show_form(step_id="add_area_config", data_schema=schema)
@@ -473,11 +639,18 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
     # ----- Edit Area -----
     async def async_step_pick_area_to_edit(self, user_input: dict[str, Any] | None = None):
         try:
-            m = self._area_label_map()
+            m = {}
+            for a in self._options.get(OPT_AREAS, []):
+                aid = a.get(A_ID)
+                name = a.get(A_NAME, aid)
+                typ = a.get(A_ACTUATOR_TYPE, "?")
+                if aid:
+                    m[f"{name} ({typ})"] = aid
+
             if not m:
                 return self.async_show_form(step_id="pick_area_to_edit", data_schema=vol.Schema({}), errors={"base": "no_areas_configured"})
 
-            labels = list(m.keys())
+            labels = sorted(m.keys(), key=lambda s: s.lower())
             schema = vol.Schema(
                 {
                     vol.Required("area_label"): selector.SelectSelector(
@@ -501,7 +674,11 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
             if not self._edit_area_id:
                 return await self.async_step_pick_area_to_edit()
 
-            a = self._get_area_by_id(self._edit_area_id)
+            a = None
+            for x in self._options.get(OPT_AREAS, []):
+                if x.get(A_ID) == self._edit_area_id:
+                    a = x
+                    break
             if not a:
                 return await self.async_step_pick_area_to_edit()
 
@@ -566,11 +743,18 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
     # ----- Remove Area -----
     async def async_step_remove_area(self, user_input: dict[str, Any] | None = None):
         try:
-            m = self._area_label_map()
+            m = {}
+            for a in self._options.get(OPT_AREAS, []):
+                aid = a.get(A_ID)
+                name = a.get(A_NAME, aid)
+                typ = a.get(A_ACTUATOR_TYPE, "?")
+                if aid:
+                    m[f"{name} ({typ})"] = aid
+
             if not m:
                 return self.async_show_form(step_id="remove_area", data_schema=vol.Schema({}), errors={"base": "no_areas_configured"})
 
-            labels = list(m.keys())
+            labels = sorted(m.keys(), key=lambda s: s.lower())
             schema = vol.Schema(
                 {
                     vol.Required("area_label"): selector.SelectSelector(
@@ -581,7 +765,23 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
 
             if user_input:
                 aid = m[user_input["area_label"]]
+
+                # Block deletion if area is in any custom zone
+                if self._zone_membership_custom(aid):
+                    return self.async_show_form(step_id="remove_area", data_schema=schema, errors={"base": "area_in_custom_zone"})
+
+                # remove area
                 self._options[OPT_AREAS] = [a for a in self._options.get(OPT_AREAS, []) if a.get(A_ID) != aid]
+
+                # remove its builtin zone
+                self._options[OPT_ZONES] = [
+                    z for z in self._options.get(OPT_ZONES, [])
+                    if not (z.get(Z_BUILTIN) and z.get(Z_TIED_AREA_ID) == aid)
+                ]
+
+                # also ensure builtin zones are consistent
+                self._ensure_builtin_zones()
+
                 return self.async_create_entry(title="", data=self._options)
 
             return self.async_show_form(step_id="remove_area", data_schema=schema)
@@ -589,3 +789,195 @@ class AdaptiveClimaOptionsFlow(config_entries.OptionsFlow):
         except Exception:
             _LOGGER.exception("ADAPTIVE_CLIMA: remove_area crashed")
             return self.async_show_form(step_id="remove_area", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    # ----- Zones CRUD -----
+    async def async_step_add_zone_pick_areas(self, user_input: dict[str, Any] | None = None):
+        try:
+            # only custom zones: 2..(x-1)
+            area_names = self._area_id_to_name()
+            area_ids = list(area_names.keys())
+            if len(area_ids) < 3:
+                # Need at least 3 areas to allow 2..x-1 without allowing all areas
+                return self.async_show_form(step_id="add_zone_pick_areas", data_schema=vol.Schema({}), errors={"base": "need_more_areas_for_custom_zone"})
+
+            opts = [{"value": aid, "label": area_names[aid]} for aid in sorted(area_ids, key=lambda k: area_names[k].lower())]
+            schema = vol.Schema(
+                {
+                    vol.Optional("zone_area_ids", default=[]): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=opts, multiple=True, mode=selector.SelectSelectorMode.DROPDOWN)
+                    )
+                }
+            )
+
+            if user_input:
+                picked = user_input.get("zone_area_ids") or []
+                if isinstance(picked, str):
+                    picked = [picked]
+                picked = list(picked)
+
+                if len(picked) < 2:
+                    return self.async_show_form(step_id="add_zone_pick_areas", data_schema=schema, errors={"base": "zone_need_two"})
+                if len(picked) >= len(area_ids):
+                    return self.async_show_form(step_id="add_zone_pick_areas", data_schema=schema, errors={"base": "zone_all_areas_forbidden"})
+
+                key = self._zone_key(picked)
+                for z in self._options.get(OPT_ZONES, []):
+                    if self._zone_key(list(z.get(Z_AREA_IDS) or [])) == key:
+                        return self.async_show_form(step_id="add_zone_pick_areas", data_schema=schema, errors={"base": "zone_duplicate"})
+
+                self._pending_zone_area_ids = list(key)
+                return await self.async_step_add_zone_confirm()
+
+            return self.async_show_form(step_id="add_zone_pick_areas", data_schema=schema)
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: add_zone_pick_areas crashed")
+            return self.async_show_form(step_id="add_zone_pick_areas", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    async def async_step_add_zone_confirm(self, user_input: dict[str, Any] | None = None):
+        try:
+            if not self._pending_zone_area_ids:
+                return await self.async_step_add_zone_pick_areas()
+
+            names = self._area_id_to_name()
+            prefix = self._tr("options.zones.warm_prefix", "Warm Zone: ")
+            parts = sorted([names.get(aid, aid) for aid in self._pending_zone_area_ids], key=lambda s: s.lower())
+            label = prefix + "+".join(parts)
+
+            schema = vol.Schema({vol.Required("confirm", default=True): bool})
+
+            if user_input is not None:
+                zones = list(self._options.get(OPT_ZONES, []))
+                zones.append(
+                    {
+                        Z_ID: uuid.uuid4().hex[:8],
+                        Z_AREA_IDS: list(self._pending_zone_area_ids),
+                        Z_BUILTIN: False,
+                    }
+                )
+                self._options[OPT_ZONES] = zones
+                self._pending_zone_area_ids = None
+                return self.async_create_entry(title="", data=self._options)
+
+            return self.async_show_form(
+                step_id="add_zone_confirm",
+                data_schema=schema,
+                description_placeholders={"zone_label": label},
+                last_step=True,
+            )
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: add_zone_confirm crashed")
+            return self.async_show_form(step_id="add_zone_confirm", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    async def async_step_pick_zone_to_edit(self, user_input: dict[str, Any] | None = None):
+        try:
+            items = self._zone_labels(include_builtin=False)
+            if not items:
+                return self.async_show_form(step_id="pick_zone_to_edit", data_schema=vol.Schema({}), errors={"base": "no_custom_zones"})
+
+            labels = [lbl for (lbl, _zid) in items]
+            map_lbl_to_id = {lbl: zid for (lbl, zid) in items}
+
+            schema = vol.Schema(
+                {
+                    vol.Required("zone_label"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=labels, mode=selector.SelectSelectorMode.DROPDOWN)
+                    )
+                }
+            )
+            if user_input:
+                self._edit_zone_id = map_lbl_to_id[user_input["zone_label"]]
+                return await self.async_step_edit_zone()
+
+            return self.async_show_form(step_id="pick_zone_to_edit", data_schema=schema)
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: pick_zone_to_edit crashed")
+            return self.async_show_form(step_id="pick_zone_to_edit", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    async def async_step_edit_zone(self, user_input: dict[str, Any] | None = None):
+        try:
+            if not self._edit_zone_id:
+                return await self.async_step_pick_zone_to_edit()
+
+            zone = None
+            for z in self._options.get(OPT_ZONES, []):
+                if z.get(Z_ID) == self._edit_zone_id and not z.get(Z_BUILTIN):
+                    zone = z
+                    break
+            if not zone:
+                self._edit_zone_id = None
+                return await self.async_step_pick_zone_to_edit()
+
+            area_names = self._area_id_to_name()
+            area_ids = list(area_names.keys())
+            opts = [{"value": aid, "label": area_names[aid]} for aid in sorted(area_ids, key=lambda k: area_names[k].lower())]
+            cur = list(zone.get(Z_AREA_IDS) or [])
+
+            schema = vol.Schema(
+                {
+                    vol.Required("zone_area_ids", default=cur): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=opts, multiple=True, mode=selector.SelectSelectorMode.DROPDOWN)
+                    )
+                }
+            )
+            if user_input:
+                picked = user_input.get("zone_area_ids") or []
+                if isinstance(picked, str):
+                    picked = [picked]
+                picked = list(picked)
+
+                if len(picked) < 2:
+                    return self.async_show_form(step_id="edit_zone", data_schema=schema, errors={"base": "zone_need_two"})
+                if len(picked) >= len(area_ids):
+                    return self.async_show_form(step_id="edit_zone", data_schema=schema, errors={"base": "zone_all_areas_forbidden"})
+
+                key = self._zone_key(picked)
+
+                # uniqueness against all zones except itself
+                for z in self._options.get(OPT_ZONES, []):
+                    if z.get(Z_ID) == self._edit_zone_id:
+                        continue
+                    if self._zone_key(list(z.get(Z_AREA_IDS) or [])) == key:
+                        return self.async_show_form(step_id="edit_zone", data_schema=schema, errors={"base": "zone_duplicate"})
+
+                zone[Z_AREA_IDS] = list(key)
+
+                # replace list object
+                self._options[OPT_ZONES] = [z if z.get(Z_ID) != self._edit_zone_id else zone for z in self._options.get(OPT_ZONES, [])]
+                self._edit_zone_id = None
+                return self.async_create_entry(title="", data=self._options)
+
+            return self.async_show_form(step_id="edit_zone", data_schema=schema)
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: edit_zone crashed")
+            return self.async_show_form(step_id="edit_zone", data_schema=vol.Schema({}), errors={"base": "unknown"})
+
+    async def async_step_remove_zone(self, user_input: dict[str, Any] | None = None):
+        try:
+            items = self._zone_labels(include_builtin=False)
+            if not items:
+                return self.async_show_form(step_id="remove_zone", data_schema=vol.Schema({}), errors={"base": "no_custom_zones"})
+
+            labels = [lbl for (lbl, _zid) in items]
+            map_lbl_to_id = {lbl: zid for (lbl, zid) in items}
+
+            schema = vol.Schema(
+                {
+                    vol.Required("zone_label"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=labels, mode=selector.SelectSelectorMode.DROPDOWN)
+                    )
+                }
+            )
+            if user_input:
+                zid = map_lbl_to_id[user_input["zone_label"]]
+                self._options[OPT_ZONES] = [z for z in self._options.get(OPT_ZONES, []) if z.get(Z_ID) != zid]
+                return self.async_create_entry(title="", data=self._options)
+
+            return self.async_show_form(step_id="remove_zone", data_schema=schema)
+
+        except Exception:
+            _LOGGER.exception("ADAPTIVE_CLIMA: remove_zone crashed")
+            return self.async_show_form(step_id="remove_zone", data_schema=vol.Schema({}), errors={"base": "unknown"})

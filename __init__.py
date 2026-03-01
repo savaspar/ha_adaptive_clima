@@ -1,4 +1,9 @@
-# /config/custom_components/adaptive_clima/__init__.py
+"""Adaptive Clima - Integration in Home-Assistant - Whole-House Adaptive Thermostat with Zones"""
+
+# Copyright (c) 2026 Primeraid Europe (Private Capital Company – IKE)
+# Licensed under the Adaptive Clima License (Source-Available, No Redistribution).
+# See LICENSE in the project root for full license text.
+
 from __future__ import annotations
 
 from typing import Any
@@ -9,10 +14,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN, OPT_HOUSE_TARGET, OPT_AREAS, A_ID
+from .const import (
+    DOMAIN,
+    OPT_HOUSE_TARGET,
+    OPT_ACTIVE_ZONE_ID,
+    OPT_ACTIVE_ZONE_OFFSET,
+    OPT_AREAS,
+    A_ID,
+)
 from .coordinator import HouseClimaCoordinator
 
-PLATFORMS = ["climate", "switch"]
+PLATFORMS = ["climate", "switch", "number"]
 
 
 def _to_plain(obj: Any) -> Any:
@@ -28,20 +40,24 @@ def _to_plain(obj: Any) -> Any:
     return obj
 
 
-def _strip_target(opts: dict) -> dict:
+def _strip_runtime(opts: dict) -> dict:
+    """
+    Options that should NOT trigger a reload:
+    - house target temperature (thermostat)
+    - active zone selection
+    - active zone offset
+    """
     x = _to_plain(opts or {})
     x.pop(OPT_HOUSE_TARGET, None)
+    x.pop(OPT_ACTIVE_ZONE_ID, None)
+    x.pop(OPT_ACTIVE_ZONE_OFFSET, None)
     return x
 
 
 def _expected_include_unique_ids(entry: ConfigEntry) -> set[str]:
     out: set[str] = set()
     for area in (entry.options or {}).get(OPT_AREAS, []):
-        aid = getattr(area, "get", None)
-        if callable(aid):
-            area_id = area.get(A_ID)
-        else:
-            area_id = None
+        area_id = area.get(A_ID) if hasattr(area, "get") else None
         if area_id:
             out.add(f"{entry.entry_id}_include_{area_id}")
     return out
@@ -64,8 +80,8 @@ async def _cleanup_stale_include_switches(hass: HomeAssistant, entry: ConfigEntr
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """
-    Reload platforms on options changes (areas/globals) so entities are recreated.
-    Do not reload for house_target-only changes.
+    Reload platforms on structural options changes (areas/zones/globals) so entities are recreated.
+    Do not reload for runtime changes (house_target / active zone / zone offset).
     Also remove orphan include switches when areas are removed.
     """
     domain_store = hass.data.setdefault(DOMAIN, {})
@@ -74,10 +90,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     old = store.get(entry.entry_id, {})
     new = _to_plain(entry.options or {})
 
-    old_stripped = _strip_target(old)
-    new_stripped = _strip_target(new)
+    old_stripped = _strip_runtime(old)
+    new_stripped = _strip_runtime(new)
 
-    # Always update snapshot
     store[entry.entry_id] = new
 
     if old_stripped == new_stripped:
@@ -94,7 +109,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Snapshot + listener
     hass.data[DOMAIN].setdefault("_last_options", {})[entry.entry_id] = _to_plain(entry.options or {})
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 

@@ -10,6 +10,8 @@ DOMAIN = "adaptive_clima"
 
 # Options keys
 OPT_AREAS = "areas"
+OPT_ZONES = "zones"
+
 OPT_HOUSE_TARGET = "house_target"
 OPT_DEADBAND = "deadband"
 OPT_SCAN_INTERVAL = "scan_interval_seconds"
@@ -17,15 +19,23 @@ OPT_MIN_CHANGE_SECONDS = "min_change_seconds"
 OPT_SETPOINT_LIMIT = "setpoint_limit"
 OPT_UNWIND_THRESHOLD = "unwind_threshold"
 
-DEFAULT_HOUSE_TARGET = 18.0
+OPT_DEFAULT_ZONE_OFFSET = "default_zone_offset"
+OPT_ACTIVE_ZONE_OFFSET = "active_zone_offset"
+OPT_ACTIVE_ZONE_ID = "active_zone_id"
 
-# Updated defaults (as requested)
+DEFAULT_HOUSE_TARGET = 21.0
+
+# Defaults (testing defaults)
 DEFAULT_DEADBAND = 0.5
 DEFAULT_SCAN_INTERVAL = 30
 DEFAULT_MIN_CHANGE_SECONDS = 60
 
 DEFAULT_SETPOINT_LIMIT = 3.0
-DEFAULT_UNWIND_THRESHOLD = 1.5
+DEFAULT_UNWIND_THRESHOLD = 2.0
+
+DEFAULT_DEFAULT_ZONE_OFFSET = 3.0
+DEFAULT_ACTIVE_ZONE_OFFSET = 3.0
+DEFAULT_ACTIVE_ZONE_ID = None
 
 # Area dict keys
 A_ID = "id"
@@ -49,3 +59,9 @@ A_INCLUDED = "included"
 ACTUATOR_CLIMATE = "climate"
 ACTUATOR_NUMBER = "number"
 ACTUATOR_SWITCH = "switch"
+
+# Zone dict keys (stored in OPT_ZONES)
+Z_ID = "id"
+Z_AREA_IDS = "area_ids"
+Z_BUILTIN = "builtin"            # True for per-area zones, False for custom zones
+Z_TIED_AREA_ID = "tied_area_id"  # set only for builtin zones
